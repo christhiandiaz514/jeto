@@ -14,6 +14,7 @@ from jeto.core import clean
 from jeto.models.vagrant import VagrantBackend
 from jeto.models.project import Project
 from jeto.models.host import Host
+from jeto.models.ssl import SSL
 from jeto.models.team import Team
 from jeto.models.domain import Domain, Upstream
 from jeto.models.domainController import DomainController
@@ -31,6 +32,11 @@ states = {
     'stop': StopInstancePermission,
     'start': StartInstancePermission,
     'provision': ProvisionInstancePermission}
+
+
+json_headers = {'Content-Type': 'application/json',
+                'Accept': 'application/json'}
+
 
 def adminAuthenticate(func):
     @wraps(func)
@@ -279,6 +285,45 @@ class InstanceApi(Resource):
                 return instance
 
 
+class SSLApi(Resource):
+    """
+    TODO:
+      - model: link to domain controller
+      - marshal: SSL
+      - post:
+        - get DC
+        - if not exist: create in model
+        - call nginx-api
+    DONE:
+    """
+    def get(self, id=None):
+        """Retrieve a list of SSL certs/keys"""
+        return SSL.query.all()
+
+    def post(self, name):
+        """Send an SSL cert/key"""
+        query = request.get_json()
+        DC = query.get('domaincontroller')
+        new_cert = SSL(name=name)
+        db.session.add(new_cert)
+        DC = DomainController.query.get(DC)
+        req.post(
+            DC.url,
+            headers=json_headers,
+            data=json.dumps(marshal(domain, domain_fields)),
+            verify=self._get_verify(domain)
+        )
+        pass
+
+    def delete(self, id):
+        """delete SSL cert/key"""
+        pass
+
+    def put(self, id):
+        """Update (override) an SSL cert/key"""
+        pass
+
+
 class DomainsApi(Resource):
     def get(self, id=None):
         if id is None:
@@ -300,7 +345,7 @@ class DomainsApi(Resource):
         domain = self._editDomain()
         req.post(
             self._get_url(domain),
-            headers=self._get_headers(),
+            headers=json_headers,
             data=json.dumps(marshal(domain, domain_fields)),
             verify=self._get_verify(domain)
         )
@@ -361,7 +406,7 @@ class DomainsApi(Resource):
         url = self._get_url(domain) + '/{}'.format(id)
         req.delete(
             url=url,
-            headers=self._get_headers(),
+            headers=json_headers,
             verify=self._get_verify(domain)
         )
         return self.get()
@@ -370,7 +415,7 @@ class DomainsApi(Resource):
         url = self._get_url(domain) + '/{}'.format(domain.id)
         req.delete(
             url=url,
-            headers=self._get_headers(),
+            headers=json_headers,
             verify=self._get_verify(domain)
         )
 
@@ -400,7 +445,7 @@ class DomainsApi(Resource):
 
             req.put(
                 '{}/{}'.format(self._get_url(domain), id),
-                headers=self._get_headers(),
+                headers=json_headers,
                 data=json.dumps(marshal(domain, domain_fields)),
                 verify=self._get_verify(domain)
             )
@@ -413,10 +458,6 @@ class DomainsApi(Resource):
         else:
             return domain.domain_controller.address + ':' +\
                 domain.domain_controller.port
-
-    def _get_headers(self):
-        return {'Content-Type': 'application/json',
-                'Accept': 'application/json'}
 
     def _get_verify(self, domain):
         if domain.domain_controller is not None:
@@ -496,17 +537,12 @@ class HtpasswordListApi(Resource, HtpasswordService):
                         'password': user['password']
                     })
                     req.post(self._get_url(slug),
-                             headers=self._get_headers(), data=data)
+                             headers=json_headers, data=data)
 
         return self.get(slug)
 
     def _get_url(self, slug):
         return super(HtpasswordListApi, self)._get_url() + '/{}'.format(slug)
-
-    def _get_headers(self):
-        return {'Accept': 'application/json',
-                'Content-Type': 'application/json'}
-
 
 
 class RestrictedResource(Resource):
